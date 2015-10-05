@@ -86,6 +86,7 @@ enum action_id : int {
     ACTION_QUICKSAVE,
     ACTION_QUICKLOAD,
     ACTION_QUIT,
+    ACTION_REPEAT_LAST_ACTION,
     // Info Screens
     ACTION_PL_INFO,
     ACTION_MAP,

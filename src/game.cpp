@@ -1929,6 +1929,7 @@ input_context get_default_mode_input_context()
     ctxt.register_action("MOUSE_MOVE");
     ctxt.register_action("SELECT");
     ctxt.register_action("SEC_SELECT");
+    ctxt.register_action("repeat_last_action");
     return ctxt;
 }
 
@@ -3020,6 +3021,10 @@ bool game::handle_action()
 
         case ACTION_ITEMACTION:
             item_action_menu();
+            break;
+        case ACTION_REPEAT_LAST_ACTION:
+            if (last_action)
+                last_action();
             break;
         default:
             break;
@@ -11212,9 +11217,9 @@ void game::eat(int pos)
         }
         return;
     }
-
     if( pos != INT_MIN ) {
         u.consume(pos);
+        last_action = [=]() { u.consume(pos); };// std::bind(&player::consume, std::ref(u), pos);
         return;
     }
 
@@ -11228,6 +11233,7 @@ void game::eat(int pos)
     const int inv_pos = item_loc.get_inventory_position();
     if( inv_pos != INT_MIN ) {
         u.consume( inv_pos );
+        last_action = [=]() { u.consume(inv_pos);};
         return;
     }
 
@@ -11604,6 +11610,7 @@ void game::read()
     }
     draw();
     u.read(pos);
+    last_action = std::bind(&player::read, std::ref(u), pos);
 }
 
 void game::chat()

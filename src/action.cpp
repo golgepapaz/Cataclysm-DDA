@@ -288,6 +288,8 @@ std::string action_ident( action_id act )
             return "item_action_menu";
         case ACTION_NULL:
             return "null";
+        case ACTION_REPEAT_LAST_ACTION:
+            return "repeat_last_action";
         default:
             return "unknown";
     }

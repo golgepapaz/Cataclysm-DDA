@@ -182,6 +182,7 @@ class game
         /** Make map a reference here, to avoid map.h in game.h */
         map &m;
         player &u;
+        std::function<void()> last_action;
 
         std::unique_ptr<Creature_tracker> critter_tracker;
         /**

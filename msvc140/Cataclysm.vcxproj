@@ -159,5 +159,10 @@
     <PreBuildEvent>
       <Message>Generate version.h</Message>
     </PreBuildEvent>
+    <ClCompile>
+      <DebugInformationFormat Condition="'$(Configuration)|$(Platform)'=='Debug SDL Tiles|x64'">ProgramDatabase</DebugInformationFormat>
+      <Optimization Condition="'$(Configuration)|$(Platform)'=='Debug SDL Tiles|x64'">Full</Optimization>
+      <BasicRuntimeChecks Condition="'$(Configuration)|$(Platform)'=='Debug SDL Tiles|x64'">Default</BasicRuntimeChecks>
+    </ClCompile>
   </ItemDefinitionGroup>
 </Project>
