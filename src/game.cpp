@@ -11219,7 +11219,7 @@ void game::eat(int pos)
     }
     if( pos != INT_MIN ) {
         u.consume(pos);
-        last_action = [=]() { u.consume(pos); };// std::bind(&player::consume, std::ref(u), pos);
+        last_action = [=]() { u.consume(pos); };
         return;
     }
 
@@ -11610,7 +11610,7 @@ void game::read()
     }
     draw();
     u.read(pos);
-    last_action = std::bind(&player::read, std::ref(u), pos);
+    last_action = [=]() { u.read(pos); };
 }
 
 void game::chat()
