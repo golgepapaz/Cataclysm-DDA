@@ -125,6 +125,7 @@ class inventory_selector
         ~inventory_selector();
 
         void sort_item_list();
+		body_part item_cover_index(item *item);
         void remove_dropping_items(player &u) const;
 
     private:
@@ -513,10 +514,11 @@ inventory_selector::inventory_selector(bool m, bool c, const std::string &t)
     if (!u.worn.empty()) {
         worn.push_back(itemstack_or_category(&worn_cat));
     }
-    auto iter = u.worn.begin();
-    for (size_t i = 0; i < u.worn.size(); i++, ++iter) {
-        worn.push_back(itemstack_or_category(&*iter, player::worn_position_to_index(i)));
-    }
+	sort_item_list();
+    //auto iter = u.worn.begin();
+    //for (size_t i = 0; i < u.worn.size(); i++, ++iter) {
+    //    worn.push_back(itemstack_or_category(&*iter, player::worn_position_to_index(i)));
+    //}
 }
 
 inventory_selector::~inventory_selector()
@@ -530,13 +532,37 @@ inventory_selector::~inventory_selector()
 void inventory_selector::sort_item_list()
 {
     player &u = g->u;
-    worn.front().it->covers()
-    for (auto &iter : u.worn) {
-        iter
-        worn.push_back(itemstack_or_category(&iter, player::worn_position_to_index(0)));
-    }
+	std::vector<item*> temp;
+	std::for_each(u.worn.begin(), u.worn.end(), [&](item& a) { temp.push_back(&a); });
+	std::sort(temp.begin(), temp.end(), [=]( item* a, item* b) { return item_cover_index(a) < item_cover_index(b); });
+	for (size_t i = 0; i < u.worn.size(); i++) {
+		worn.push_back(itemstack_or_category(temp[i], player::worn_position_to_index(i)));
+	}
+ 
         
 
+}
+body_part inventory_selector::item_cover_index(item* item)
+{
+  constexpr std::array<body_part,num_bp> body_parts = {
+	  bp_torso,
+	  bp_head,
+	  bp_eyes,
+	  bp_mouth,
+	  bp_arm_l,
+	  bp_arm_r,
+	  bp_hand_l,
+	  bp_hand_r,
+	  bp_leg_l,
+	  bp_leg_r,
+	  bp_foot_l,
+	  bp_foot_r
+  };
+  for (body_part bp : body_parts) {
+	  if (item->covers(bp))
+		  return bp;
+  }
+  return num_bp;
 }
 bool inventory_selector::handle_movement(const std::string &action)
 {
