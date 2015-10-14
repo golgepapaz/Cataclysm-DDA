@@ -124,7 +124,8 @@ class inventory_selector
         inventory_selector(bool m, bool c, const std::string &t);
         ~inventory_selector();
 
-        void remove_dropping_items( player &u ) const;
+        void sort_item_list();
+        void remove_dropping_items(player &u) const;
 
     private:
         /** All the items that should be shown in the left column */
@@ -526,7 +527,17 @@ inventory_selector::~inventory_selector()
     }
     g->refresh_all();
 }
+void inventory_selector::sort_item_list()
+{
+    player &u = g->u;
+    worn.front().it->covers()
+    for (auto &iter : u.worn) {
+        iter
+        worn.push_back(itemstack_or_category(&iter, player::worn_position_to_index(0)));
+    }
+        
 
+}
 bool inventory_selector::handle_movement(const std::string &action)
 {
     const itemstack_vector &items = in_inventory ? this->items : this->worn;
