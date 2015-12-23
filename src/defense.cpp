@@ -7,6 +7,7 @@
 #include "mtype.h"
 #include "overmapbuffer.h"
 #include "crafting.h"
+#include "recipe_dictionary.h"
 #include "monstergenerator.h"
 #include "construction.h"
 #include "messages.h"
@@ -204,10 +205,8 @@ void defense_game::init_constructions()
 
 void defense_game::init_recipes()
 {
-    for( auto &recipe : recipes ) {
-        for( auto &elem : recipe.second ) {
-            ( elem )->time /= 10; // Things take turns, not minutes
-        }
+    for( auto &elem : recipe_dict ) {
+        ( elem )->time /= 10; // Things take turns, not minutes
     }
 }
 
@@ -1107,8 +1106,7 @@ Press %s to buy everything in your cart, %s to buy nothing."),
             item tmp( items[0][i] , calendar::turn);
             tmp = tmp.in_its_container();
             for (int j = 0; j < item_count[0][i]; j++) {
-                if (g->u.can_pickVolume(tmp.volume()) && g->u.can_pickWeight(tmp.weight()) &&
-                    g->u.inv.size() < inv_chars.size()) {
+                if (g->u.can_pickVolume(tmp.volume()) && g->u.can_pickWeight(tmp.weight())) {
                     g->u.i_add(tmp);
                 } else { // Could fit it in the inventory!
                     dropped_some = true;
@@ -1313,6 +1311,7 @@ void draw_caravan_items(WINDOW *w, std::vector<itype_id> *items,
 
 int caravan_price(player &u, int price)
 {
+    ///\EFFECT_BARTER reduces caravan prices, 5% per point, up to 50%
     if (u.skillLevel( skill_barter ) > 10) {
         return int( double(price) * .5);
     }

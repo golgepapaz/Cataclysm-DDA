@@ -93,7 +93,7 @@ class Character : public Creature
 
         /** Modifiers for health values exclusive to characters */
         virtual void mod_healthy(int nhealthy);
-        virtual void mod_healthy_mod(int nhealthy_mod);
+        virtual void mod_healthy_mod(int nhealthy_mod, int cap);
 
         /** Setters for health values exclusive to characters */
         virtual void set_healthy(int nhealthy);
@@ -121,7 +121,7 @@ class Character : public Creature
         virtual int get_hit_base() const override;
 
         /** Handles health fluctuations over time */
-        virtual void update_health(int base_threshold = 0);
+        virtual void update_health(int external_modifiers = 0);
 
         /** Resets the value of all bonus fields to 0. */
         virtual void reset_bonuses() override;
@@ -172,7 +172,7 @@ class Character : public Creature
         /** Returns true if the player has the entered starting trait */
         bool has_base_trait(const std::string &flag) const;
         /** Returns the trait id with the given invlet, or an empty string if no trait has that invlet */
-        std::string trait_by_invlet( char ch ) const;
+        std::string trait_by_invlet( long ch ) const;
 
         /** Toggles a trait on the player and in their mutation list */
         void toggle_trait(const std::string &flag);
@@ -449,7 +449,7 @@ class Character : public Creature
         // In newcharacter.cpp
         void empty_skills();
         /** Returns a random name from NAMES_* */
-        void pick_name();
+        void pick_name(bool bUseDefault = false);
         /** Get the idents of all base traits. */
         std::vector<std::string> get_base_traits() const;
         /** Get the idents of all traits/mutations. */

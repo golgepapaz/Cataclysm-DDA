@@ -29,6 +29,8 @@ const skill_id skill_survival( "survival" );
 const skill_id skill_firstaid( "firstaid" );
 const skill_id skill_fabrication( "fabrication" );
 
+const species_id ZOMBIE( "ZOMBIE" );
+
 iuse_transform::~iuse_transform()
 {
 }
@@ -93,7 +95,7 @@ long iuse_transform::use(player *p, item *it, bool t, const tripoint &pos ) cons
     } else {
         // Transform into something in a container, assume the content is
         // "created" right now and give the content the current time as birthday
-        it->make(container_id);
+        it->make(container_id, true);
         it->contents.push_back(item(target_id, calendar::turn));
         target = &it->contents.back();
     }
@@ -178,8 +180,8 @@ void explosion_iuse::load( JsonObject &obj )
 {
     obj.read( "explosion_power", explosion_power );
     obj.read( "explosion_shrapnel", explosion_shrapnel );
+    obj.read( "explosion_distance_factor", explosion_distance_factor );
     obj.read( "explosion_fire", explosion_fire );
-    obj.read( "explosion_blast", explosion_blast );
     obj.read( "draw_explosion_radius", draw_explosion_radius );
     if( obj.has_member( "draw_explosion_color" ) ) {
         draw_explosion_color = color_from_string( obj.get_string( "draw_explosion_color" ) );
@@ -217,7 +219,7 @@ long explosion_iuse::use(player *p, item *it, bool t, const tripoint &pos) const
         return 0;
     }
     if (explosion_power >= 0) {
-        g->explosion( pos, explosion_power, explosion_shrapnel, explosion_fire, explosion_blast);
+        g->explosion( pos, explosion_power, explosion_distance_factor, explosion_shrapnel, explosion_fire );
     }
     if (draw_explosion_radius >= 0) {
         g->draw_explosion( pos, draw_explosion_radius, draw_explosion_color);
@@ -532,6 +534,7 @@ long place_monster_iuse::use( player *p, item *it, bool, const tripoint &pos ) c
     if( skill2 ) {
         skill_offset += p->skillLevel( skill2 );
     }
+    ///\EFFECT_INT increases chance of a placed turret being friendly
     if( rng( 0, p->int_cur / 2 ) + skill_offset < rng( 0, difficulty ) ) {
         if( hostile_msg.empty() ) {
             p->add_msg_if_player( m_bad, _( "The %s scans you and makes angry beeping noises!" ),
@@ -681,7 +684,13 @@ long pick_lock_actor::use( player *p, item *it, bool, const tripoint& ) const
     }
 
     p->practice( skill_mechanics, 1 );
-    p->moves -= std::min( 0, ( 1000 - ( pick_quality * 100 ) ) - ( p->dex_cur + p->skillLevel( skill_mechanics ) ) * 5 );
+    ///\EFFECT_DEX speeds up door lock picking
+
+    ///\EFFECT_MECHANICS speeds up door lock picking
+    p->moves -= std::max(0, ( 1000 - ( pick_quality * 100 ) ) - ( p->dex_cur + p->skillLevel( skill_mechanics ) ) * 5);
+    ///\EFFECT_DEX improves chances of successfully picking door lock, reduces chances of bad outcomes
+
+    ///\EFFECT_MECHANICS improves chances of successfully picking door lock, reduces chances of bad outcomes
     int pick_roll = ( dice( 2, p->skillLevel( skill_mechanics ) ) + dice( 2, p->dex_cur ) - it->damage / 2 ) * pick_quality;
     int door_roll = dice( 4, 30 );
     if( pick_roll >= door_roll ) {
@@ -705,11 +714,10 @@ long pick_lock_actor::use( player *p, item *it, bool, const tripoint& ) const
             g->add_event( EVENT_WANTED, int( calendar::turn ) + 300, 0, p->global_sm_location() );
         }
     }
-    // Special handling, normally the item isn't used up, but it is if broken.
     if( it->damage >= 5 ) {
-        return 1;
-    }
-
+        p->i_rem(it);
+        return 0;
+        }
     return it->type->charges_to_use();
 }
 
@@ -864,6 +872,7 @@ int extended_firestarter_actor::calculate_time_for_lens_fire( const player *p, f
     float moves_base = std::pow( 80 / light_level, 8 ) * 1000 ;
     // survival 0 takes 3 * moves_base, survival 1 takes 1,5 * moves_base,
     // max moves capped at moves_base
+    ///\EFFECT_SURVIVAL speeds up fire starting with lens
     float moves_modifier = 1 / ( p->get_skill_level( skill_survival ) * 0.33 + 0.33 );
     if( moves_modifier < 1 ) {
         moves_modifier = 1;
@@ -906,6 +915,7 @@ long extended_firestarter_actor::use( player *p, item *it, bool, const tripoint 
                 skillLevel = 0.536;
             }
             // At survival=5 modifier=1, at survival=1 modifier=~6.
+            ///\EFFECT_SURVIVAL speeds up fire starting
             float moves_modifier = std::pow( 5 / skillLevel, 1.113 );
             if (moves_modifier < 1) {
                 moves_modifier = 1; // activity time improvement is capped at skillevel 5
@@ -1059,6 +1069,7 @@ int salvage_actor::cut_up(player *p, item *it, item *cut) const
     // This can go awry if there is a volume / recipe mismatch.
     int count = cut->volume();
     // Chance of us losing a material component to entropy.
+    ///\EFFECT_FABRICATION reduces chance of losing components when cutting items up
     int entropy_threshold = std::max(5, 10 - p->skillLevel( skill_fabrication ) );
     // What material components can we get back?
     std::vector<std::string> cut_material_components = cut->made_of();
@@ -1086,6 +1097,7 @@ int salvage_actor::cut_up(player *p, item *it, item *cut) const
         count -= 1;
     }
     // Fail dex roll, potentially lose more parts.
+    ///\EFFECT_DEX randomly reduces component loss when cutting items up
     if (dice(3, 4) > p->dex_cur) {
         count -= rng(0, 2);
     }
@@ -1167,6 +1179,9 @@ void inscribe_actor::load( JsonObject &obj )
         material_whitelist.push_back("silver");
     }
 
+    verb = _(obj.get_string( "verb", "Carve" ).c_str());
+    gerund = _(obj.get_string( "gerund", "Carved" ).c_str());
+
     if( !on_items && !on_terrain ) {
         obj.throw_error( "Tried to create an useless inscribe_actor, at least on of \"on_items\" or \"on_terrain\" should be true" );
     }
@@ -1177,7 +1192,7 @@ iuse_actor *inscribe_actor::clone() const
     return new inscribe_actor( *this );
 }
 
-bool inscribe_actor::item_inscription( item *cut, std::string verb, std::string gerund ) const
+bool inscribe_actor::item_inscription( item *cut ) const
 {
     if( !cut->made_of(SOLID) ) {
         add_msg( m_info, _("You can't inscribe an item that isn't solid!") );
@@ -1192,23 +1207,51 @@ bool inscribe_actor::item_inscription( item *cut, std::string verb, std::string 
         return false;
     }
 
-    const bool hasnote = cut->has_var( "item_note" );
+    enum inscription_type {
+        INSCRIPTION_LABEL,
+        INSCRIPTION_NOTE,
+        INSCRIPTION_CANCEL
+    };
+
+    uimenu menu;
+    menu.text = string_format(_("%s meaning?"), verb.c_str());
+    menu.addentry(INSCRIPTION_LABEL, true, -1, _("It's a label"));
+    menu.addentry(INSCRIPTION_NOTE, true, -1, _("It's a note"));
+    menu.addentry(INSCRIPTION_CANCEL, true, 'q', _("Cancel"));
+    menu.query();
+
+    std::string carving, carving_type;
+    switch ( menu.ret )
+    {
+    case INSCRIPTION_LABEL:
+        carving = "item_label";
+        carving_type = "item_label_type";
+        break;
+    case INSCRIPTION_NOTE:
+        carving = "item_note";
+        carving_type = "item_note_type";
+        break;
+    case INSCRIPTION_CANCEL:
+        return false;
+    }
+
+    const bool hasnote = cut->has_var( carving );
     std::string message = "";
     std::string messageprefix = string_format(hasnote ? _("(To delete, input one '.')\n") : "") +
                                 string_format(_("%1$s on the %2$s is: "),
                                         gerund.c_str(), cut->type_name().c_str());
     message = string_input_popup(string_format(_("%s what?"), verb.c_str()), 64,
-                                 (hasnote ? cut->get_var( "item_note" ) : message),
+                                 (hasnote ? cut->get_var( carving ) : message),
                                  messageprefix, "inscribe_item", 128);
 
-    if( !message.empty() ) {
+    if( !message.empty() )
+    {
         if( hasnote && message == "." ) {
-            cut->erase_var( "item_note" );
-            cut->erase_var( "item_note_type" );
-            cut->erase_var( "item_note_typez" );
+            cut->erase_var( carving );
+            cut->erase_var( carving_type );
         } else {
-            cut->set_var( "item_note", message );
-            cut->set_var( "item_note_type", gerund );
+            cut->set_var( carving, message );
+            cut->set_var( carving_type, gerund );
         }
     }
 
@@ -1225,7 +1268,7 @@ long inscribe_actor::use( player *p, item *it, bool t, const tripoint& ) const
     int choice = INT_MAX;
     if( on_terrain && on_items ) {
         uimenu imenu;
-        imenu.text = _("Write on what?");
+        imenu.text = string_format( _("%s on what?"), verb.c_str() );
         imenu.addentry( 0, true, MENU_AUTOASSIGN, _("The ground") );
         imenu.addentry( 1, true, MENU_AUTOASSIGN, _("An item") );
         imenu.addentry( 2, true, MENU_AUTOASSIGN, _("Cancel") );
@@ -1242,13 +1285,13 @@ long inscribe_actor::use( player *p, item *it, bool t, const tripoint& ) const
     }
 
     if( choice == 0 ) {
-        return iuse::handle_ground_graffiti( p, it, _("Write what?") );
+        return iuse::handle_ground_graffiti( p, it, string_format( _("%s what?"), verb.c_str()) );
     }
 
     int pos = g->inv( _("Inscribe which item?") );
     item *cut = &( p->i_at(pos) );
     // inscribe_item returns false if the action fails or is canceled somehow.
-    if( item_inscription( cut, verb, gerund ) ) {
+    if( item_inscription( cut ) ) {
         return it->type->charges_to_use();
     }
 
@@ -1369,7 +1412,7 @@ long enzlave_actor::use( player *p, item *it, bool t, const tripoint& ) const
 
     for( auto &it : items ) {
         const auto mt = it.get_mtype();
-        if( it.is_corpse() && mt->in_species("ZOMBIE") && mt->has_material("flesh") &&
+        if( it.is_corpse() && mt->in_species( ZOMBIE ) && mt->has_material("flesh") &&
             mt->sym == "Z" && it.active && !it.has_var( "zlave" ) ) {
             corpses.push_back( &it );
         }
@@ -1391,6 +1434,7 @@ long enzlave_actor::use( player *p, item *it, bool t, const tripoint& ) const
 
     // Survival skill increases your willingness to get things done,
     // but it doesn't make you feel any less bad about it.
+    ///\EFFECT_SURVIVAL increases tolerance for enzlavement
     if( p->morale_level() <= (15 * (tolerance_level - p->skillLevel( skill_survival ) )) - 150 ) {
         add_msg(m_neutral, _("The prospect of cutting up the copse and letting it rise again as a slave is too much for you to deal with right now."));
         return 0;
@@ -1419,6 +1463,7 @@ long enzlave_actor::use( player *p, item *it, bool t, const tripoint& ) const
     } else {
         add_msg(m_bad, _("You feel horrible for mutilating and enslaving someone's corpse."));
 
+        ///\EFFECT_SURVIVAL decreases moral penalty and duration for enzlavement
         int moraleMalus = -50 * (5.0 / (float) p->skillLevel( skill_survival ));
         int maxMalus = -250 * (5.0 / (float)p->skillLevel( skill_survival ));
         int duration = 300 * (5.0 / (float)p->skillLevel( skill_survival ));
@@ -1447,11 +1492,17 @@ long enzlave_actor::use( player *p, item *it, bool t, const tripoint& ) const
     // An average zombie with an undamaged corpse is 0 + 8 + 14 = 22.
     int difficulty = (body->damage * 5) + (mt->hp / 10) + (mt->speed / 5);
     // 0 - 30
+    ///\EFFECT_DEX increases chance of success for enzlavement
+
+    ///\EFFECT_SURVIVAL increases chance of success for enzlavement
+
+    ///\EFFECT_FIRSTAID increases chance of success for enzlavement
     int skills = p->skillLevel( skill_survival ) + p->skillLevel( skill_firstaid ) + (p->dex_cur / 2);
     skills *= 2;
 
     int success = rng(0, skills) - rng(0, difficulty);
 
+    ///\EFFECT_FIRSTAID speeds up enzlavement
     const int moves = difficulty * 1200 / p->skillLevel( skill_firstaid );
 
     p->assign_activity(ACT_MAKE_ZLAVE, moves);
@@ -1462,6 +1513,9 @@ long enzlave_actor::use( player *p, item *it, bool t, const tripoint& ) const
 
 bool enzlave_actor::can_use( const player *p, const item*, bool, const tripoint& ) const
 {
+    ///\EFFECT_SURVIVAL >1 allows enzlavement
+
+    ///\EFFECT_FIRSTAID >1 allows enzlavement
     return p->get_skill_level( skill_survival ) > 1 && p->get_skill_level( skill_firstaid ) > 1;
 }
 
@@ -1672,6 +1726,7 @@ long musical_instrument_actor::use( player *p, item *it, bool t, const tripoint&
     }
 
     std::string desc = "";
+    ///\EFFECT_PER increases morale bonus when playing an instrument
     const int morale_effect = fun + fun_bonus * p->per_cur;
     if( morale_effect >= 0 && calendar::turn.once_every( description_frequency ) ) {
         if( !descriptions.empty() ) {
@@ -1701,4 +1756,110 @@ bool musical_instrument_actor::can_use( const player *p, const item*, bool, cons
     }
 
     return true;
+}
+
+iuse_actor *holster_actor::clone() const
+{
+    return new holster_actor( *this );
+}
+
+void holster_actor::load( JsonObject &obj )
+{
+    holster_prompt = obj.get_string( "holster_prompt", "" );
+    holster_msg    = obj.get_string( "holster_msg",    "" );
+
+    max_volume = obj.get_int( "max_volume" );
+    min_volume = obj.get_int( "min_volume", max_volume / 3 );
+    max_weight = obj.get_int( "max_weight", max_weight );
+    multi      = obj.get_int( "multi",      multi );
+    draw_cost  = obj.get_int( "draw_cost",  draw_cost );
+
+    auto tmp = obj.get_string_array( "skills" );
+    std::transform( tmp.begin(), tmp.end(), std::back_inserter( skills ),
+    []( const std::string & elem ) {
+        return skill_id( elem );
+    } );
+
+    flags = obj.get_string_array( "flags" );
+}
+
+bool holster_actor::can_holster( const item& obj ) const {
+    if( obj.volume() > max_volume || obj.volume() < min_volume ) {
+        return false;
+    }
+    if( max_weight > 0 && obj.weight() > max_weight ) {
+        return false;
+    }
+    return std::any_of( flags.begin(), flags.end(), [&](const std::string& f) { return obj.has_flag(f); } ) ||
+           std::find( skills.begin(), skills.end(), obj.gun_skill() ) != skills.end();
+}
+
+long holster_actor::use( player *p, item *it, bool, const tripoint & ) const
+{
+    std::string prompt = holster_prompt.empty() ? _( "Holster item" ) : _( holster_prompt.c_str() );
+
+    if( &p->weapon == it ) {
+        p->add_msg_if_player( _( "You need to unwield your %s before using it." ), it->tname().c_str() );
+        return 0;
+    }
+
+    int pos = 0;
+    std::vector<std::string> opts;
+
+    if( ( int ) it->contents.size() < multi ) {
+        opts.push_back( prompt );
+        pos = -1;
+    }
+
+    std::transform( it->contents.begin(), it->contents.end(), std::back_inserter( opts ),
+    []( const item & elem ) {
+        return string_format( _( "Draw %s" ), elem.display_name().c_str() );
+    } );
+
+    if( opts.size() > 1 ) {
+        pos += uimenu( false, string_format( _( "Use %s" ), it->tname().c_str() ).c_str(), opts ) - 1;
+    }
+
+    if( pos >= 0 ) {
+        p->wield_contents( it, pos, draw_cost );
+    } else {
+        item &obj = p->i_at( g->inv_for_filter( prompt, [&](const item& e) { return can_holster(e); } ) );
+
+        if( obj.is_null() ) {
+            p->add_msg_if_player( _( "Never mind." ) );
+            return 0;
+        }
+
+        // if selected item is unsuitable inform the player why not
+        if( obj.volume() > max_volume ) {
+            p->add_msg_if_player( m_info, _( "Your %s is too big to fit in your %s" ),
+                                  obj.tname().c_str(), it->tname().c_str() );
+            return 0;
+        }
+        if( obj.volume() < min_volume ) {
+            p->add_msg_if_player( m_info, _( "Your %s is too small to fit in your %s" ),
+                                  obj.tname().c_str(), it->tname().c_str() );
+            return 0;
+        }
+        if( max_weight > 0 && obj.weight() > max_weight ) {
+            p->add_msg_if_player( m_info, _( "Your %s is too heavy to fit in your %s" ),
+                                  obj.tname().c_str(), it->tname().c_str() );
+            return 0;
+        }
+
+        if( std::none_of( flags.begin(), flags.end(), [&]( const std::string & f ) {
+        return obj.has_flag( f );
+        } ) &&
+        std::find( skills.begin(), skills.end(), obj.gun_skill() ) == skills.end() ) {
+            p->add_msg_if_player( m_info, _( "You can't put your %s in your %s" ),
+                                  obj.tname().c_str(), it->tname().c_str() );
+            return 0;
+        }
+
+        p->add_msg_if_player( holster_msg.empty() ? _( "You holster your %s" ) : _( holster_msg.c_str() ),
+                              obj.tname().c_str(), it->tname().c_str() );
+        p->store( it, &obj, obj.is_gun() ? obj.gun_skill() : obj.weap_skill(), VOLUME_MOVE_COST );
+    }
+
+    return 0;
 }

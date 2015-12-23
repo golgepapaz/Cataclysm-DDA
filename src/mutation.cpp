@@ -19,6 +19,9 @@
 #include <algorithm> //std::min
 #include <sstream>
 
+// '!' and '=' are uses as default bindings in the menu
+const invlet_wrapper mutation_chars("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ\"#&()*+./:;@[\\]^_{|}");
+
 bool Character::has_trait(const std::string &b) const
 {
     return my_mutations.count( b ) > 0;
@@ -175,6 +178,7 @@ void Character::mutation_effect(std::string mut)
         bps.push_back(bp_foot_r);
 
     } else if (mut == "STR_ALPHA") {
+        ///\EFFECT_STR_MAX determines bonus from STR mutation
         if (str_max <= 6) {
             str_max = 8;
         } else if (str_max <= 7) {
@@ -186,6 +190,7 @@ void Character::mutation_effect(std::string mut)
         }
         recalc_hp();
     } else if (mut == "DEX_ALPHA") {
+        ///\EFFECT_DEX_MAX determines bonus from DEX mutation
         if (dex_max <= 6) {
             dex_max = 8;
         } else if (dex_max <= 7) {
@@ -196,6 +201,7 @@ void Character::mutation_effect(std::string mut)
             dex_max = 18;
         }
     } else if (mut == "INT_ALPHA") {
+        ///\EFFECT_INT_MAX determines bonus from INT mutation
         if (int_max <= 6) {
             int_max = 8;
         } else if (int_max <= 7) {
@@ -209,6 +215,7 @@ void Character::mutation_effect(std::string mut)
         int_max *= 2; // Now, can you keep it? :-)
 
     } else if (mut == "PER_ALPHA") {
+        ///\EFFECT_PER_MAX determines bonus from PER mutation
         if (per_max <= 6) {
             per_max = 8;
         } else if (per_max <= 7) {
@@ -260,6 +267,7 @@ void Character::mutation_loss_effect(std::string mut)
         recalc_hp();
 
     } else if (mut == "STR_ALPHA") {
+        ///\EFFECT_STR_MAX determines penalty from STR mutation loss
         if (str_max == 18) {
             str_max = 15;
         } else if (str_max == 15) {
@@ -271,6 +279,7 @@ void Character::mutation_loss_effect(std::string mut)
         }
         recalc_hp();
     } else if (mut == "DEX_ALPHA") {
+        ///\EFFECT_DEX_MAX determines penalty from DEX mutation loss
         if (dex_max == 18) {
             dex_max = 15;
         } else if (dex_max == 15) {
@@ -281,6 +290,7 @@ void Character::mutation_loss_effect(std::string mut)
             dex_max = 4;
         }
     } else if (mut == "INT_ALPHA") {
+        ///\EFFECT_INT_MAX determines penalty from INT mutation loss
         if (int_max == 18) {
             int_max = 15;
         } else if (int_max == 15) {
@@ -294,6 +304,7 @@ void Character::mutation_loss_effect(std::string mut)
         int_max /= 2; // In case you have a freak accident with the debug menu ;-)
 
     } else if (mut == "PER_ALPHA") {
+        ///\EFFECT_PER_MAX determines penalty from PER mutation loss
         if (per_max == 18) {
             per_max = 15;
         } else if (per_max == 15) {
@@ -377,6 +388,7 @@ void player::activate_mutation( const std::string &mut )
             g->m.ter(dirx, diry) != t_tree) {
             // Takes about 100 minutes (not quite two hours) base time.
             // Being better-adapted to the task means that skillful Survivors can do it almost twice as fast.
+            ///\EFFECT_CARPENTRY speeds up burrowing
             turns = (100000 - 5000 * g->u.skillLevel( skill_id( "carpentry" ) ));
         } else if (g->m.move_cost(dirx, diry) == 2 && g->get_levz() == 0 &&
                    g->m.ter(dirx, diry) != t_dirt && g->m.ter(dirx, diry) != t_grass) {
@@ -498,7 +510,7 @@ void show_mutations_titlebar(WINDOW *window, player *p, std::string menu_mode)
     wrefresh(window);
 }
 
-std::string Character::trait_by_invlet( const char ch ) const
+std::string Character::trait_by_invlet( const long ch ) const
 {
     for( auto &mut : my_mutations ) {
         if( mut.second.key == ch ) {
@@ -520,7 +532,7 @@ void player::power_mutations()
         }
         // New mutations are initialized with no key at all, so we have to do this here.
         if( mut.second.key == ' ' ) {
-            for( const auto &letter : inv_chars ) {
+            for( const auto &letter : mutation_chars ) {
                 if( trait_by_invlet( letter ).empty() ) {
                     mut.second.key = letter;
                     break;
@@ -675,20 +687,18 @@ void player::power_mutations()
                 continue;
             }
             redraw = true;
-            const char newch = popup_getkey(_("%s; enter new letter."),
+            const long newch = popup_getkey(_("%s; enter new letter."),
                                             mutation_branch::get_name( mut_id ).c_str());
             wrefresh(wBio);
             if(newch == ch || newch == ' ' || newch == KEY_ESCAPE) {
                 continue;
             }
-            const auto other_mut_id = trait_by_invlet( newch );
-            // if there is already a mutation with the new key, the key
-            // is considered valid.
-            if( other_mut_id.empty() && inv_chars.find(newch) == std::string::npos ) {
-                // TODO separate list of letters for mutations
-                popup(_("%c is not a valid inventory letter."), newch);
+            if( !mutation_chars.valid( newch ) ) {
+                popup( _("Invlid mutation letter. Only those characters are valid:\n\n%s"),
+                       mutation_chars.get_allowed_chars().c_str() );
                 continue;
             }
+            const auto other_mut_id = trait_by_invlet( newch );
             if( !other_mut_id.empty() ) {
                 std::swap(my_mutations[mut_id].key, my_mutations[other_mut_id].key);
             } else {

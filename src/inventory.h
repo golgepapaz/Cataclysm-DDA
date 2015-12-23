@@ -13,8 +13,6 @@
 class map;
 class npc;
 
-const extern std::string inv_chars;
-
 typedef std::list< std::list<item> > invstack;
 typedef std::vector< std::list<item>* > invslice;
 typedef std::vector< const std::list<item>* > const_invslice;
@@ -22,6 +20,32 @@ typedef std::vector< std::pair<std::list<item>*, int> > indexed_invslice;
 typedef std::function<bool(const item &)> item_filter;
 
 class salvage_actor;
+
+/**
+ * Wrapper to handled a set of valid "inventory" letters. "inventory" can be any set of
+ * objects that the player can access via a single character (e.g. bionics).
+ * The class is (currently) derived from std::string for compatibility and because it's
+ * simpler. But it may be changed to derive from `std::set<long>` or similar to get the full
+ * range of possible characters.
+ */
+class invlet_wrapper : private std::string {
+private:
+
+public:
+    invlet_wrapper( const char *chars ) : std::string( chars ) { }
+
+    bool valid( long invlet ) const;
+    std::string get_allowed_chars() const { return *this; }
+
+    using std::string::begin;
+    using std::string::end;
+    using std::string::rbegin;
+    using std::string::rend;
+    using std::string::size;
+    using std::string::length;
+};
+
+const extern invlet_wrapper inv_chars;
 
 class inventory
 {
@@ -120,7 +144,7 @@ class inventory
         int  amount_of (itype_id it, bool used_as_tool) const;
         long charges_of(itype_id it) const;
 
-        std::list<item> use_amount (itype_id it, int quantity, bool use_container = false);
+        std::list<item> use_amount (itype_id it, int quantity);
         std::list<item> use_charges(itype_id it, long quantity);
 
         bool has_amount (itype_id it, int quantity) const;
